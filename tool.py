@@ -64,15 +64,23 @@ def run_exec(args):
 
 def run_upload(args):
     # first grab file:
-    with open(args.filename, 'r') as f:
+    with open(args.source, 'r') as f:
         data = f.read()
 
     # yay, data acquired, encode it such that it contains no quotes etc.
     datab64 = base64.b64encode(data)
 
-    # craft the payload
+
     p = 'import base64;'
-    p += 'f = open("{}", "w");'.format(args.filename)
+    # craft the payload
+    if args.destination:
+        destination = args.destination
+        p += 'import os;'
+        p += 'dir = os.path.dirname("{}"); '.format(destination)
+        p += "make_dir_without_newlines = os.makedirs(dir) if not os.path.isdir(dir) else True;"
+    else:
+        destination = args.source
+    p += 'f = open("{}", "w");'.format(destination)
     p += 'f.write(base64.b64decode("{}"));'.format(datab64)
     p += ' f.close();'
 
@@ -96,7 +104,8 @@ if __name__ == "__main__":
     eval_parser.set_defaults(func=run_eval)
 
     upload_parser = subparsers.add_parser('upload')
-    upload_parser.add_argument('filename')
+    upload_parser.add_argument('source')
+    upload_parser.add_argument('-d', '--destination', type=str, default=None, help="Defaults to source path.")
     upload_parser.set_defaults(func=run_upload)
 
     execute_file_parser = subparsers.add_parser('exec')
