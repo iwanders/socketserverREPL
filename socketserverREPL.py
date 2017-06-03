@@ -7,10 +7,8 @@ import threading
 import sys
 import time
 try:
-    import __builtin__
     import SocketServer as ss
 except ImportError:
-    import builtins as __builtin__
     import socketserver as ss
 
 # Create a function that is available from the shell to gracefully exit server
