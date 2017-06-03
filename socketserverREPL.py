@@ -54,14 +54,16 @@ class InteractiveSocket(code.InteractiveConsole):
             raise EOFError("Socket closed")
 
         self.write(prompt);
-        r = self.rfile.readline().strip()
+        raw_value = self.rfile.readline()
+        r = raw_value.rstrip()
 
+        # self.wfile.write("\033[31m" + repr(raw_value) + "\033[0m\n" + "\n")
         try:
             r = r.decode('ascii')
         except:
             pass
 
-        if (len(r) == 0):
+        if (len(raw_value) == 0):
             raise EOFError("Empty line, ^D?")
 
         return r

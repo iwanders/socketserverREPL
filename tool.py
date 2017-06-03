@@ -18,18 +18,21 @@ class socketREPL(object):
 
         if (self.echo):
             sys.stdout.write("\033[1m" + z + "\033[0m\n" + "\n")
-        
-
-    def read(self):
+ 
+    def read(self, print_function=None):
         try:
             b = b""
             while True:
                 # extremely innefficient, but who cares...
-                b += self.sock.recv(1)
+                d = self.sock.recv(1)
+                if print_function:
+                    print_function(d)
+                b += d
                 if (b.endswith(b">>> ")):
                     return b.decode('ascii')
         except KeyboardInterrupt:
             pass
+        
 
     def close(self):
         self.sock.shutdown(1)
@@ -39,9 +42,9 @@ class socketREPL(object):
 
 def run_eval(args):
     c = socketREPL(args.dest, args.port)
-    sys.stdout.write(c.read())
+    c.read(print_function=lambda x: sys.stdout.write(x))
     c.write(args.statement)
-    sys.stdout.write(c.read())
+    c.read(print_function=lambda x: sys.stdout.write(x))
     c.close()
 
 def run_exec(args):
@@ -57,9 +60,9 @@ def run_exec(args):
     if (args.fix_print):
         p += 'f.close();'
     c = socketREPL(args.dest, args.port)
-    sys.stdout.write(c.read())
+    c.read(print_function=lambda x: sys.stdout.write(x))
     c.write(p)
-    sys.stdout.write(c.read())
+    c.read(print_function=lambda x: sys.stdout.write(x))
     c.close()
 
 def run_upload(args):
@@ -85,9 +88,9 @@ def run_upload(args):
     p += ' f.close();'
 
     c = socketREPL(args.dest, args.port)
-    sys.stdout.write(c.read())
+    c.read(print_function=lambda x: sys.stdout.write(x))
     c.write(p)
-    sys.stdout.write(c.read())
+    c.read(print_function=lambda x: sys.stdout.write(x))
 
     c.close()
 
@@ -105,7 +108,7 @@ if __name__ == "__main__":
 
     upload_parser = subparsers.add_parser('upload')
     upload_parser.add_argument('source')
-    upload_parser.add_argument('-d', '--destination', type=str, default=None, help="Defaults to source path.")
+    upload_parser.add_argument('destination', type=str, default=None, help="Defaults to source path.", nargs="?")
     upload_parser.set_defaults(func=run_upload)
 
     execute_file_parser = subparsers.add_parser('exec')
