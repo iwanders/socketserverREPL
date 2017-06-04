@@ -25,6 +25,10 @@ class socketREPL(object):
             while True:
                 # extremely innefficient, but who cares...
                 d = self.sock.recv(1)
+
+                if (len(d) == 0):
+                    return b
+
                 if print_function:
                     print_function(d)
                 b += d
