@@ -129,7 +129,7 @@ class ThreadedTCPServer(ss.ThreadingMixIn, ss.TCPServer):
 
 if __name__ == "__main__":
     # Create the server object and a thread to serve.
-    server = ThreadedTCPServer(("192.168.0.86", 1337), RequestPythonREPL)
+    server = ThreadedTCPServer(("127.0.0.1", 1337), RequestPythonREPL)
     server_thread = threading.Thread(target=server.serve_forever)
 
     # Exit the server thread when the main thread terminates

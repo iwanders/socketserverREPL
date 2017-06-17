@@ -5,6 +5,8 @@ import sys
 import socket
 import time
 import base64
+import hashlib
+import os
 
 
 class socketREPL(object):
@@ -17,119 +19,360 @@ class socketREPL(object):
         self.sock.sendall(z.encode('ascii') + b"\n")
 
         if (self.echo):
-            sys.stdout.write("\033[1m" + z + "\033[0m\n" + "\n")
- 
+            sys.stdout.write("\033[1m" + z + "\033[0m" + "\n")
+
     def read(self, print_function=None):
         try:
             b = b""
             while True:
-                # extremely innefficient, but who cares...
+                # Inefficient, but no one is transferring large amounts of data
+                # with this system...
                 d = self.sock.recv(1)
 
                 if (len(d) == 0):
                     return b
 
-                if print_function:
+                if d and print_function:
                     print_function(d)
+
                 b += d
+
                 if (b.endswith(b">>> ")):
                     return b.decode('ascii')
+
+                if (b.endswith(b"... ")):
+                    return b.decode('ascii')
+
         except KeyboardInterrupt:
             pass
-        
 
     def close(self):
-        self.sock.shutdown(1)
-        self.sock.close()
-        
+        try:
+            self.sock.shutdown(1)
+            self.sock.close()
+        except socket.error as e:
+            sys.stderr.write("Closing connection failed: {}\n".format(str(e)))
+            pass
 
 
 def run_eval(args):
+    statement = args.statement.replace("\\n", "\n")
+
     c = socketREPL(args.dest, args.port)
     c.read(print_function=lambda x: sys.stdout.write(x))
-    c.write(args.statement)
-    c.read(print_function=lambda x: sys.stdout.write(x))
+
+    for l in statement.split("\n"):
+        c.write(l)
+        c.read(print_function=lambda x: sys.stdout.write(x))
+
     c.close()
 
+
 def run_exec(args):
+    # Put all statements on one line, this is convenient as it requires
+    # only one read statement afterwards.
     p = 'exec_name = "{}";'.format(args.filename)
     if (args.fix_print):
-        p += 'import tempfile;'
+        p += 'import tempfile;import os;'
         p += 'f = open("{}", "r");'.format(args.filename)
         p += 'd = f.read(); f.close();'
-        p += 'd = d.replace("print(", "Print(");' # replace print( with Print(
-        p += 'f = tempfile.NamedTemporaryFile("w"); f.write(d);f.flush();'
+        p += 'd = d.replace("print(", "Print(");'  # replace print( with Print(
+        p += 'f = tempfile.NamedTemporaryFile("w", delete=False);'
+        p += 'f.write(d);f.close();'
         p += "exec_name = f.name;"
     p += 'execfile(exec_name, {"Print": sys.displayhook});'
     if (args.fix_print):
-        p += 'f.close();'
-    c = socketREPL(args.dest, args.port)
-    c.read(print_function=lambda x: sys.stdout.write(x))
+        p += 'os.remove(f.name);'  # discard the file again.
+
+    # check if we are verbose.
+    if (args.verbose):
+        echo_flag = True
+        print_function = lambda x: sys.stdout.write(x)
+    else:
+        echo_flag = False
+        print_function = lambda x: None
+
+    c = socketREPL(args.dest, args.port, echo=echo_flag)
+    c.read(print_function=print_function)
     c.write(p)
-    c.read(print_function=lambda x: sys.stdout.write(x))
+    c.read(print_function=print_function)
     c.close()
 
+
 def run_upload(args):
-    # first grab file:
+    # Grab the file's data, do this first because if this fails we don't need
+    # to open the connection.
     with open(args.source, 'r') as f:
         data = f.read()
 
-    # yay, data acquired, encode it such that it contains no quotes etc.
+    # Yay, data acquired, encode it such that it contains no quotes etc.
     datab64 = base64.b64encode(data)
 
-
-    p = 'import base64;'
     # craft the payload
+    p = 'import base64;'
     if args.destination:
         destination = args.destination
         p += 'import os;'
         p += 'dir = os.path.dirname("{}"); '.format(destination)
-        p += "make_dir_without_newlines = os.makedirs(dir) if not os.path.isdir(dir) else True;"
+        # Create the dirs if required, if statement on one line to avoid
+        # multiple prompts to be read.
+        p += "_ = os.makedirs(dir) if not os.path.isdir(dir) else True;"
     else:
         destination = args.source
+
     p += 'f = open("{}", "w");'.format(destination)
-    p += 'f.write(base64.b64decode("{}"));'.format(datab64)
+    p += 'fdata = base64.b64decode("{}");'.format(datab64)
+    p += 'f.write(fdata);'
     p += ' f.close();'
 
-    c = socketREPL(args.dest, args.port)
-    c.read(print_function=lambda x: sys.stdout.write(x))
+    # check if we are verbose.
+    if (args.verbose):
+        echo_flag = True
+        print_function = lambda x: sys.stdout.write(x)
+    else:
+        echo_flag = False
+        print_function = lambda x: None
+
+    # create the connection
+    c = socketREPL(args.dest, args.port, echo=echo_flag)
+
+    # Read the banner
+    c.read(print_function=print_function)
+
+    # Drop the payload.
     c.write(p)
-    c.read(print_function=lambda x: sys.stdout.write(x))
+
+    # Read the prompt after.
+    c.read(print_function=print_function)
+
+    if (args.check):
+        # Calculate the hash of the file at the remote end.
+        p = b"import hashlib;"
+        p += "x = hashlib.md5(); x.update(fdata);Print(x.hexdigest());"
+        c.write(p)
+        hash = c.read(print_function=print_function).split("\n")[0]
+
+        # Calcualte the hash of the file as we have sent it.
+        x = hashlib.md5()
+        x.update(data)
+
+        # Compare them.
+        if (hash == x.hexdigest()):
+            sys.stdout.write("md5 {} of received data"
+                             " matches source data.\n".format(hash))
+        else:
+            sys.stderr.write("md5 {} of received data"
+                             " does not match source data.\n".format(hash))
 
     c.close()
 
-    
+
+def run_download(args):
+    # Payload to read data and print the base64 string.
+    p = 'import base64;'
+    p += 'f = open("{}", "r");'.format(args.source)
+    p += 'data = f.read(); fdata = base64.b64encode(data);'
+    p += ' f.close();'
+    p += "Print(fdata);"  # drop the dataz!
+
+    # check if we are verbose.
+    if (args.verbose):
+        echo_flag = True
+        print_function = lambda x: sys.stdout.write(x)
+    else:
+        echo_flag = False
+        print_function = lambda x: None
+
+    # Create connection.
+    c = socketREPL(args.dest, args.port, echo=echo_flag)
+
+    # read banner and prompt
+    c.read(print_function=print_function)
+    # drop the payload
+    c.write(p)
+    # Read the base64 string and split the prompt from it.
+    blob = c.read(print_function=print_function).split("\n")[0]
+
+    # decode the data
+    data = base64.b64decode(blob)
+
+    if (args.check):
+        # calculate the md5 of the sent data
+        p = b"import hashlib;"
+        p += "x = hashlib.md5(); x.update(data);Print(x.hexdigest());"
+        c.write(p)
+        hash = c.read(print_function=print_function).split("\n")[0]
+
+        # calculate local md5 of the received data
+        x = hashlib.md5()
+        x.update(data)
+        if (hash == x.hexdigest()):
+            sys.stdout.write("md5 {} of received data"
+                             " matches source data.\n".format(hash))
+        else:
+            sys.stderr.write("md5 {} of received data"
+                             " does not match source data.\n".format(hash))
+
+    c.close()
+
+    # ensure destination folder exists, if no destination use basename to local
+    # folder.
+    if (args.destination):
+        destination = args.destination
+        dest_dir = os.path.dirname(destination)
+        if (dest_dir) and (not os.path.isdir(dest_dir)):
+            os.makedirs(dest_dir)
+    else:
+        destination = os.path.basename(args.source)
+
+    # Finally, write the data to the destination file.
+    with open(destination, "w") as f:
+        f.write(data)
+
+
+def run_repl(args):
+    # print some info..
+    sys.stdout.write("KeyboardInterrupt is treated locally, two consecutive"
+                     " KeyboardInterrupt \ncloses connection from this side),"
+                     " control+D sends exit() to remote.\n")
+    # import convenience readline (history) and rlcompleter for tab completion
+    # of python functions.
+    import readline
+    import rlcompleter
+    readline.parse_and_bind("tab: complete")
+
+    # create the connection.
+    c = socketREPL(args.dest, args.port, echo=False)
+
+    def read_split():
+        z = c.read()
+        if z and (len(z) >= 4):
+            return z[:-4], z[-4:]
+        else:
+            return b"", b""
+
+    interrupt_counter = 0
+    repling = True
+
+    # Read the prompt and banner
+    output, prompt = read_split()
+    sys.stdout.write(output)
+    while repling:
+        try:  # outer loop for keyboard interrupt (control+C)
+            try:  # try raw_input to catch control+D
+                line = raw_input(prompt)
+            except EOFError as e:
+                # got control+D, close everything gracefully.
+                repling = False
+                line = "exit()"  # interpret as if exit() was typed.
+                sys.stdout.write("exit()\n")  # ensure it shows in stdout.
+
+            # Reset the consecutive control+C counter.
+            interrupt_counter = 0
+
+            # Replace any print( statement with Print() to ensure printing to
+            # the socket.
+            if (args.fix_print):
+                line = line.replace("print(", "Print(")
+
+            # Finally, drop the typed instruction into the socket.
+            c.write(line)
+            # read any output, and the prompt.
+            output, prompt = read_split()
+            # Write any output to stdout.
+            sys.stdout.write(output)
+
+        except KeyboardInterrupt as e:
+            # increase consecutive control+C counter.
+            interrupt_counter += 1
+            if (interrupt_counter > 1):
+                sys.stdout.write("Local KeyboardInterrupt,"
+                                 " closing connection.")
+                break
+            print(e)
+
+    c.close()
+    # ensure we are on a new line after this.
+    sys.stdout.write("\n")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--dest', default="192.168.0.86")
-    parser.add_argument('-p', '--port', default=1337, type=int)
+    parser.add_argument('-d', '--dest', default=None,
+                        help="Hostname or ip of target running REPL. Defaults"
+                        " to 127.0.0.1, will use environment REPL_HOST if"
+                        " set.")
+    parser.add_argument('-p', '--port', default=None, type=int,
+                        help="Port of target turnning REPL. Defaults"
+                        " to 1337, will use environment REPL_PORT if"
+                        " set.")
     subparsers = parser.add_subparsers(dest="command")
 
-    eval_parser = subparsers.add_parser('eval')
-    eval_parser.add_argument('statement')
+    eval_parser = subparsers.add_parser('evaluate',
+                                        help="Evaluate a statement")
+    eval_parser.add_argument('statement', help="The string to evaluate, '\n'"
+                             " is replaced by newline and the statement is "
+                             "executed & read line by line")
     eval_parser.set_defaults(func=run_eval)
 
-    upload_parser = subparsers.add_parser('upload')
+    upload_parser = subparsers.add_parser('upload', help="Upload a file")
     upload_parser.add_argument('source')
-    upload_parser.add_argument('destination', type=str, default=None, help="Defaults to source path.", nargs="?")
+    upload_parser.add_argument('-v', default=False, action="store_true",
+                               dest="verbose", help="print all interaction")
+    upload_parser.add_argument('--no-check', default=True,
+                               action="store_false", dest="check",
+                               help="do not perform md5 transfer check")
+    upload_parser.add_argument('destination', type=str, default=None,
+                               help="defaults to source path", nargs="?")
     upload_parser.set_defaults(func=run_upload)
 
-    execute_file_parser = subparsers.add_parser('exec')
-    execute_file_parser.add_argument('filename')
-    execute_file_parser.add_argument('--no-fix-print', default=True, dest="fix_print", action="store_false")
-    execute_file_parser.set_defaults(func=run_exec)
+    execute_parser = subparsers.add_parser('execute', help="Execute a file")
+    execute_parser.add_argument('filename')
+    execute_parser.add_argument('-q', default=True, action="store_false",
+                                dest="verbose", help="print all interaction")
+    execute_parser.add_argument('--no-fix-print', default=True,
+                                dest="fix_print", action="store_false",
+                                help="change print() into Print() before the"
+                                " file is executed (default: True)")
+    execute_parser.set_defaults(func=run_exec)
 
+    download_parser = subparsers.add_parser('download', help="Download a file")
+    download_parser.add_argument('source')
+    download_parser.add_argument('-v', default=False, action="store_true",
+                                 dest="verbose", help="print all interaction")
+    download_parser.add_argument('--no-check', default=True,
+                                 action="store_false", dest="check",
+                                 help="do not perform md5 transfer check")
+    download_parser.add_argument('destination', type=str, default=None,
+                                 help="defaults to source basename", nargs="?")
+    download_parser.set_defaults(func=run_download)
 
-        
+    repl_parser = subparsers.add_parser('repl', help="Drop into a repl")
+    repl_parser.add_argument('--no-fix-print', default=True,
+                             dest="fix_print", action="store_false",
+                             help="change print() into Print() before the"
+                             " execution (default: True)")
+    repl_parser.set_defaults(func=run_repl)
+
     args = parser.parse_args()
+
+    if ("REPL_HOST" in os.environ) and args.dest is None:
+        args.dest = os.environ["REPL_HOST"]
+
+    if args.dest is None:  # still None, go for fallback.
+        args.dest = "127.0.0.1"
+
+    if "REPL_PORT" in os.environ and args.port is None:
+        args.port = int(os.environ["REPL_PORT"])
+
+    if (args.port is None):  # Still None, go for fallback.
+        args.port = 1337
 
     # no command
     if (args.command is None):
         parser.print_help()
         parser.exit()
         sys.exit(1)
-
 
     args.func(args)
     sys.exit()
