@@ -1,15 +1,22 @@
 #!/usr/bin/env python
 
-from __future__ import print_function
-
 import code
 import threading
+import traceback
 import sys
 import time
+import socket
+
+# load following in python2 and python3 compatible way.
 try:
     import SocketServer as ss
 except ImportError:
     import socketserver as ss
+
+try:
+    from StringIO import StringIO as StringIO
+except ImportError:
+    from io import StringIO as StringIO
 
 # Create a function that is available from the shell to gracefully exit server
 # after disconnect.
@@ -32,6 +39,16 @@ def new_displayhook(data):
     else:
         print(data)
 sys.displayhook = new_displayhook
+
+# For python 3 we also have to setup an excepthook since it's not automatically
+# passed along to the displayhook anymore? Not entirely sure, but capturing
+# the stack trace and printing it via the displayhook works.
+def new_excepthook(type, value, tb):
+    z = StringIO()
+    traceback.print_exception(type, value, tb, file=z)
+    new_displayhook("{}".format(z.getvalue()))
+    z.close()
+sys.excepthook = new_excepthook
 
 # Relevant links:
 # https://docs.python.org/2/library/code.html
@@ -124,8 +141,10 @@ class RequestPythonREPL(ss.StreamRequestHandler):
 
 # TCPServer with new thread for each connection:
 class ThreadedTCPServer(ss.ThreadingMixIn, ss.TCPServer):
-    pass
-
+    # https://stackoverflow.com/a/18858817, ensure socket is directly available.
+    def server_bind(self):
+        self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.socket.bind(self.server_address)
 
 if __name__ == "__main__":
     # Create the server object and a thread to serve.
@@ -144,5 +163,6 @@ if __name__ == "__main__":
 
     # If we reach this point we are really shutting down the server.
     print("Shutting down.")
-    server.shutdown()
     server.server_close()
+    server.shutdown()
+    server_thread.join()
