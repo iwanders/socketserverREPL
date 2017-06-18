@@ -61,8 +61,10 @@ def run_eval(args):
     c = socketREPL(args.dest, args.port)
     c.read(print_function=lambda x: sys.stdout.write(x))
 
-    for l in statement.split("\n"):
-        c.write(l)
+    for line in statement.split("\n"):
+        if (args.fix_print):
+            line = line.replace("print(", "Print(")
+        c.write(line)
         c.read(print_function=lambda x: sys.stdout.write(x))
 
     c.close()
@@ -238,8 +240,8 @@ def run_repl(args):
     # import convenience readline (history) and rlcompleter for tab completion
     # of python functions.
     import readline
-    import rlcompleter
-    readline.parse_and_bind("tab: complete")
+    # import rlcompleter
+    # readline.parse_and_bind("tab: complete")
 
     # create the connection.
     c = socketREPL(args.dest, args.port, echo=False)
@@ -308,14 +310,29 @@ if __name__ == "__main__":
                         " set.")
     subparsers = parser.add_subparsers(dest="command")
 
+    eval_description = ("This evaluates the one statement that is provided to"
+                        " it. Any \\n occurances are replace by non escaped "
+                        "newlines and the statement is executed line by line. "
+                        "Output is read between each line. The statement may "
+                        "span multiple lines, basically it's the same as "
+                        "pasting this statement into a open REPL session.")
     eval_parser = subparsers.add_parser('evaluate',
-                                        help="Evaluate a statement")
+                                        help="Evaluate a statement",
+                                        description=eval_description)
     eval_parser.add_argument('statement', help="The string to evaluate, '\n'"
                              " is replaced by newline and the statement is "
                              "executed & read line by line")
+    eval_parser.add_argument('--no-fix-print', default=True,
+                             dest="fix_print", action="store_false",
+                             help="change print() into Print() before the"
+                             " file is executed (default: True)")
     eval_parser.set_defaults(func=run_eval)
 
-    upload_parser = subparsers.add_parser('upload', help="Upload a file")
+    upload_description = ("This allows uploading a file to the remote REPL "
+                          " from the local computer. It overwrites the "
+                          " destination without prompt.")
+    upload_parser = subparsers.add_parser('upload', help="Upload a file",
+                                          description=upload_description)
     upload_parser.add_argument('source')
     upload_parser.add_argument('-v', default=False, action="store_true",
                                dest="verbose", help="print all interaction")
@@ -326,7 +343,15 @@ if __name__ == "__main__":
                                help="defaults to source path", nargs="?")
     upload_parser.set_defaults(func=run_upload)
 
-    execute_parser = subparsers.add_parser('execute', help="Execute a file")
+    execute_description = ("This allows remote execution of a script. By "
+                           "default the file is copied to a temporary file "
+                           "to replace print() with Print(). The working "
+                           "directory is NOT changed prior to execution. "
+                           "The working directory is not per thread, so this "
+                           "would cause unexpected behaviour with multiple "
+                           "connections.")
+    execute_parser = subparsers.add_parser('execute', help="Execute a file",
+                                           description=execute_description)
     execute_parser.add_argument('filename')
     execute_parser.add_argument('-q', default=True, action="store_false",
                                 dest="verbose", help="print all interaction")
@@ -336,7 +361,11 @@ if __name__ == "__main__":
                                 " file is executed (default: True)")
     execute_parser.set_defaults(func=run_exec)
 
-    download_parser = subparsers.add_parser('download', help="Download a file")
+    download_description = ("This allows downloading a file from the remote "
+                            " REPL to the local computer. It overwrites the "
+                            " destination without prompt.")
+    download_parser = subparsers.add_parser('download', help="Download a file",
+                                            description=download_description)
     download_parser.add_argument('source')
     download_parser.add_argument('-v', default=False, action="store_true",
                                  dest="verbose", help="print all interaction")
@@ -347,7 +376,14 @@ if __name__ == "__main__":
                                  help="defaults to source basename", nargs="?")
     download_parser.set_defaults(func=run_download)
 
-    repl_parser = subparsers.add_parser('repl', help="Drop into a repl")
+    repl_description = ("This REPL command is slightly more convenient than "
+                        "connecting to the socketserverREPL with netcat. "
+                        "By default is automatically replaces your print() "
+                        "calls with the Print() function to ensure the output "
+                        "is sent through the connection, additionally there is"
+                        " a command history (using the readline module).")
+    repl_parser = subparsers.add_parser('repl', help="Drop into a repl",
+                                        description=repl_description)
     repl_parser.add_argument('--no-fix-print', default=True,
                              dest="fix_print", action="store_false",
                              help="change print() into Print() before the"
