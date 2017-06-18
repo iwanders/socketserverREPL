@@ -92,8 +92,6 @@ def run_eval(args):
     c.read(print_function=lambda x: sys.stdout.write(x))
 
     for line in statement.split("\n"):
-        if (args.fix_print):
-            line = line.replace("print(", "Print(")
         c.write(line)
         c.read(print_function=lambda x: sys.stdout.write(x))
 
@@ -104,17 +102,7 @@ def run_exec(args):
     # Put all statements on one line, this is convenient as it requires
     # only one read statement afterwards.
     p = 'exec_name = "{}";'.format(args.filename)
-    if (args.fix_print):
-        p += 'import tempfile;import os;'
-        p += 'f = open("{}", "r");'.format(args.filename)
-        p += 'd = f.read(); f.close();'
-        p += 'd = d.replace("print(", "Print(");'  # replace print( with Print(
-        p += 'f = tempfile.NamedTemporaryFile("w", delete=False);'
-        p += 'f.write(d);f.close();'
-        p += "exec_name = f.name;"
-    p += 'execfile(exec_name, {"Print": sys.displayhook});'
-    if (args.fix_print):
-        p += 'os.remove(f.name);'  # discard the file again.
+    p += 'execfile(exec_name);'
 
     # check if we are verbose.
     if (args.verbose):
@@ -180,7 +168,7 @@ def run_upload(args):
     if (args.check):
         # Calculate the hash of the file at the remote end.
         p = b"import hashlib;"
-        p += "x = hashlib.md5(); x.update(fdata);Print(x.hexdigest());"
+        p += "x = hashlib.md5(); x.update(fdata);print(x.hexdigest());"
         c.write(p)
         hash = c.read(print_function=print_function).split("\n")[0]
 
@@ -205,7 +193,7 @@ def run_download(args):
     p += 'f = open("{}", "r");'.format(args.source)
     p += 'data = f.read(); fdata = base64.b64encode(data);'
     p += ' f.close();'
-    p += "Print(fdata);"  # drop the dataz!
+    p += "print(fdata);"  # drop the data!
 
     # check if we are verbose.
     if (args.verbose):
@@ -231,7 +219,7 @@ def run_download(args):
     if (args.check):
         # calculate the md5 of the sent data
         p = b"import hashlib;"
-        p += "x = hashlib.md5(); x.update(data);Print(x.hexdigest());"
+        p += "x = hashlib.md5(); x.update(data);print(x.hexdigest());"
         c.write(p)
         hash = c.read(print_function=print_function).split("\n")[0]
 
@@ -302,11 +290,6 @@ def run_repl(args):
             # Reset the consecutive control+C counter.
             interrupt_counter = 0
 
-            # Replace any print( statement with Print() to ensure printing to
-            # the socket.
-            if (args.fix_print):
-                line = line.replace("print(", "Print(")
-
             # Finally, drop the typed instruction into the socket.
             c.write(line)
             # read any output, and the prompt.
@@ -349,10 +332,6 @@ if __name__ == "__main__":
     eval_parser.add_argument('statement', help="The string to evaluate, '\n'"
                              " is replaced by newline and the statement is "
                              "executed & read line by line")
-    eval_parser.add_argument('--no-fix-print', default=True,
-                             dest="fix_print", action="store_false",
-                             help="change print() into Print() before the"
-                             " file is executed (default: True)")
     eval_parser.set_defaults(func=run_eval)
 
     upload_description = ("This allows uploading a file to the remote REPL "
@@ -370,22 +349,12 @@ if __name__ == "__main__":
                                help="defaults to source path", nargs="?")
     upload_parser.set_defaults(func=run_upload)
 
-    execute_description = ("This allows remote execution of a script. By "
-                           "default the file is copied to a temporary file "
-                           "to replace print() with Print(). The working "
-                           "directory is NOT changed prior to execution. "
-                           "The working directory is not per thread, so this "
-                           "would cause unexpected behaviour with multiple "
-                           "connections.")
+    execute_description = ("This allows remote execution of a script.")
     execute_parser = subparsers.add_parser('execute', help="Execute a file",
                                            description=execute_description)
     execute_parser.add_argument('filename')
     execute_parser.add_argument('-q', default=True, action="store_false",
                                 dest="verbose", help="print all interaction")
-    execute_parser.add_argument('--no-fix-print', default=True,
-                                dest="fix_print", action="store_false",
-                                help="change print() into Print() before the"
-                                " file is executed (default: True)")
     execute_parser.set_defaults(func=run_exec)
 
     download_description = ("This allows downloading a file from the remote "
@@ -405,16 +374,10 @@ if __name__ == "__main__":
 
     repl_description = ("This REPL command is slightly more convenient than "
                         "connecting to the socketserverREPL with netcat. "
-                        "By default is automatically replaces your print() "
-                        "calls with the Print() function to ensure the output "
-                        "is sent through the connection, additionally there is"
-                        " a command history (using the readline module).")
+                        " A command history is made available by using the"
+                        " readline module.")
     repl_parser = subparsers.add_parser('repl', help="Drop into a repl",
                                         description=repl_description)
-    repl_parser.add_argument('--no-fix-print', default=True,
-                             dest="fix_print", action="store_false",
-                             help="change print() into Print() before the"
-                             " execution (default: True)")
     repl_parser.set_defaults(func=run_repl)
 
     args = parser.parse_args()

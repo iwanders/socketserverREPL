@@ -32,19 +32,16 @@ import socket
 # load following in python2 and python3 compatible way.
 if sys.version_info.major == 2:
     import SocketServer as ss
-    from StringIO import StringIO as StringIO
 else:
     import socketserver as ss
-    from io import StringIO as StringIO
 
 # Create a function that is available from the shell to gracefully exit server
 # after disconnect.
 should_exit = False
 
-
 def halt():
     global should_exit
-    sys.displayhook("Shutting down after all clients disconnect.")
+    print("Shutting down after all clients disconnect.")
     should_exit = True
 
 # Update the displayhook such that it redirects data to the appropriate stream
@@ -52,27 +49,23 @@ def halt():
 # print() itself.
 thread_scope = threading.local()
 
+original_stdout = sys.stdout
 
-def new_displayhook(data):
-    if (data is None):
-        return
+class new_stdout(object):
+    def write(self, data):
+        if hasattr(thread_scope, "wfile"):
+            thread_scope.wfile.write(data.encode('ascii'))
+        else:
+            original_stdout.write(data.encode('ascii'))
 
-    if hasattr(thread_scope, "displayhook"):
-        thread_scope.displayhook(data)
-    else:
-        print(data)
-sys.displayhook = new_displayhook
+    def flush(self):
+        if hasattr(thread_scope, "wfile"):
+            thread_scope.wfile.flush()
+        else:
+            original_stdout.flush()
 
-# For python 3 we also have to setup an excepthook capturing
-# the stack trace and printing it via the displayhook works.
-
-
-def new_excepthook(type, value, tb):
-    z = StringIO()
-    traceback.print_exception(type, value, tb, file=z)
-    new_displayhook("{}".format(z.getvalue()))
-    z.close()
-sys.excepthook = new_excepthook
+sys.stdout = new_stdout()
+sys.stderr = new_stdout()
 
 # Relevant links:
 # https://docs.python.org/2/library/code.html
@@ -83,16 +76,14 @@ class InteractiveSocket(code.InteractiveConsole):
     def __init__(self, rfile, wfile, locals=None):
         """
             This class actually creates the interactive session and ties it
-            to the socket by reading input from the socket and writing output
-            that's passed through the Print() function back into the socket.
+            to the socket by reading input from the socket and writing output.
         """
         code.InteractiveConsole.__init__(self, locals)
         self.rfile = rfile
         self.wfile = wfile
 
-        # This is called before the banner, we can use it to print this note:
-        thread_scope.displayhook("Use Print() to ensure printing to stream.")
-        # print() always outputs to the stdout of the interpreter.
+        # This print goes to the socket.
+        print("Use Print() to print locally.")
 
     def write(self, data):
         # Write data to the stream.
@@ -144,13 +135,11 @@ class RequestPythonREPL(ss.StreamRequestHandler):
                 f = bytes(f, 'ascii')
             except:
                 pass
-
-            self.wfile.write(f)
-            self.wfile.write(b"\n")
-            self.wfile.flush()
+            original_stdout.write(f.decode('ascii'))
+            original_stdout.write("\n")
+            original_stdout.flush()
 
         # Add that function to the thread's scope.
-        thread_scope.displayhook = Print
         thread_scope.rfile = self.rfile
         thread_scope.wfile = self.wfile
 
