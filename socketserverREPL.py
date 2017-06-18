@@ -24,7 +24,6 @@
 
 import code
 import threading
-import traceback
 import sys
 import time
 import socket
@@ -44,19 +43,15 @@ def halt():
     print("Shutting down after all clients disconnect.")
     should_exit = True
 
-# Update the displayhook such that it redirects data to the appropriate stream
-# if the errors and such are printed by code.interact. This does not capture
-# print() itself.
 thread_scope = threading.local()
-
 original_stdout = sys.stdout
 
 class ThreadAwareStdout(object):
     """
-        This class acts as a file object and based on the thread that uses it it
-        writes to the appropriate stream. If it is called from the main thread
-        "wfile" will not be present and it will write to the original stdout.
-        Which is the stdout of the server process.
+        This class acts as a file object and based on the thread it is used
+        from it uses to the appropriate stream. If it is called from the main
+        thread "wfile" will not be present and it will write to the original
+        stdou, which is the stdout of the server process.
     """
     def write(self, data):
         if hasattr(thread_scope, "wfile"):
@@ -91,7 +86,8 @@ class InteractiveSocket(code.InteractiveConsole):
         self.rfile = rfile
         self.wfile = wfile
 
-        print("Use Print() to print locally.")
+        print("Use Print() to print on the server thread, use halt() to close"
+              " the server after the last session terminates.")
 
     def write(self, data):
         # Write data to the stream.

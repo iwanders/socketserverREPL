@@ -61,7 +61,7 @@ class socketREPL(object):
 
                 if d and print_function:
                     # call the print function if it is set for local echo.
-                    print_function(d)
+                    print_function(d.decode('ascii'))
 
                 b += d
 
@@ -265,8 +265,11 @@ def run_repl(args):
     c = socketREPL(args.dest, args.port, echo=False)
 
     def read_split():
-        z = c.read()
+        z = c.read(print_function = lambda x: sys.stdout.write(x))
         if (z.endswith(">>> ") or z.endswith("... ")):
+            # output is already echod as it comes in, but we have to remove
+            # the prompt as that is handled by raw_input.
+            sys.stdout.write(chr(8) * 4)
             return z[:-4], z[-4:]
         else:
             return z, ""
@@ -276,7 +279,6 @@ def run_repl(args):
 
     # Read the prompt and banner
     output, prompt = read_split()
-    sys.stdout.write(output)
     while repling:
         try:  # outer loop for keyboard interrupt (control+C)
             try:  # try raw_input to catch control+D
@@ -294,8 +296,6 @@ def run_repl(args):
             c.write(line)
             # read any output, and the prompt.
             output, prompt = read_split()
-            # Write any output to stdout.
-            sys.stdout.write(output)
 
         except KeyboardInterrupt as e:
             # increase consecutive control+C counter.
@@ -354,7 +354,8 @@ if __name__ == "__main__":
                                            description=execute_description)
     execute_parser.add_argument('filename')
     execute_parser.add_argument('-q', default=True, action="store_false",
-                                dest="verbose", help="print all interaction")
+                                dest="verbose",
+                                help="Inhibit printing all interaction")
     execute_parser.set_defaults(func=run_exec)
 
     download_description = ("This allows downloading a file from the remote "
