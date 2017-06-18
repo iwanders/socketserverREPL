@@ -51,7 +51,13 @@ thread_scope = threading.local()
 
 original_stdout = sys.stdout
 
-class new_stdout(object):
+class ThreadAwareStdout(object):
+    """
+        This class acts as a file object and based on the thread that uses it it
+        writes to the appropriate stream. If it is called from the main thread
+        "wfile" will not be present and it will write to the original stdout.
+        Which is the stdout of the server process.
+    """
     def write(self, data):
         if hasattr(thread_scope, "wfile"):
             thread_scope.wfile.write(data.encode('ascii'))
@@ -64,8 +70,8 @@ class new_stdout(object):
         else:
             original_stdout.flush()
 
-sys.stdout = new_stdout()
-sys.stderr = new_stdout()
+sys.stdout = ThreadAwareStdout()
+sys.stderr = ThreadAwareStdout()
 
 # Relevant links:
 # https://docs.python.org/2/library/code.html
@@ -77,12 +83,14 @@ class InteractiveSocket(code.InteractiveConsole):
         """
             This class actually creates the interactive session and ties it
             to the socket by reading input from the socket and writing output.
+
+            This class is always located in the thread that is created per
+            connection.
         """
         code.InteractiveConsole.__init__(self, locals)
         self.rfile = rfile
         self.wfile = wfile
 
-        # This print goes to the socket.
         print("Use Print() to print locally.")
 
     def write(self, data):
@@ -104,6 +112,7 @@ class InteractiveSocket(code.InteractiveConsole):
         r = raw_value.rstrip()
 
         try:
+            # Python 2 / 3 difference.
             r = r.decode('ascii')
         except:
             pass
@@ -128,7 +137,7 @@ class RequestPythonREPL(ss.StreamRequestHandler):
         # Actually handle the request from socketserver, every connection is
         # handled in a different thread.
 
-        # Create a new Print() function that outputs to the stream.
+        # Create a new Print() function that outputs to the original stdout.
         def Print(f):
             f = str(f)
             try:
