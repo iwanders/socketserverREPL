@@ -2,12 +2,12 @@
 This project exposes the interactive Python interpreter over a TCP socket. It
 does so in a manner that allows multiple connections at the same time, each 
 connection runs in a separate thread and has its own scope. It is a pure Python
-implementation relying on the [code](module_code) and
-[socketserver](module_socketserver) modules.
+implementation relying on the [code][module_code] and
+[socketserver][module_socketserver] modules.
 Tested on Python 2.7 and Python 3.4.
 
 ## What is the use case?
-I created this to facilitate development for [Pythonista](pythonista), a Python
+I created this to facilitate development for [Pythonista][pythonista], a Python
 interpreter that runs on iOS. At first I had a script that allowed updating
 other scripts, but I missed the functionality to quickly test something in an
 interactive interpreter. Getting the interpreter with `code.interact()` from a
