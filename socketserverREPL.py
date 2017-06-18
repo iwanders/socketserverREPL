@@ -8,19 +8,18 @@ import time
 import socket
 
 # load following in python2 and python3 compatible way.
-try:
+if sys.version_info.major == 2:
     import SocketServer as ss
-except ImportError:
-    import socketserver as ss
-
-try:
     from StringIO import StringIO as StringIO
-except ImportError:
+else:
+    import socketserver as ss
     from io import StringIO as StringIO
 
 # Create a function that is available from the shell to gracefully exit server
 # after disconnect.
 should_exit = False
+
+
 def halt():
     global should_exit
     sys.displayhook("Shutting down after all clients disconnect.")
@@ -30,6 +29,8 @@ def halt():
 # if the errors and such are printed by code.interact. This does not capture
 # print() itself.
 thread_scope = threading.local()
+
+
 def new_displayhook(data):
     if (data is None):
         return
@@ -40,9 +41,10 @@ def new_displayhook(data):
         print(data)
 sys.displayhook = new_displayhook
 
-# For python 3 we also have to setup an excepthook since it's not automatically
-# passed along to the displayhook anymore? Not entirely sure, but capturing
+# For python 3 we also have to setup an excepthook capturing
 # the stack trace and printing it via the displayhook works.
+
+
 def new_excepthook(type, value, tb):
     z = StringIO()
     traceback.print_exception(type, value, tb, file=z)
@@ -53,8 +55,15 @@ sys.excepthook = new_excepthook
 # Relevant links:
 # https://docs.python.org/2/library/code.html
 # https://github.com/python/cpython/blob/2.7/Lib/code.py
+
+
 class InteractiveSocket(code.InteractiveConsole):
     def __init__(self, rfile, wfile, locals=None):
+        """
+            This class actually creates the interactive session and ties it
+            to the socket by reading input from the socket and writing output
+            that's passed through the Print() function back into the socket.
+        """
         code.InteractiveConsole.__init__(self, locals)
         self.rfile = rfile
         self.wfile = wfile
@@ -62,7 +71,6 @@ class InteractiveSocket(code.InteractiveConsole):
         # This is called before the banner, we can use it to print this note:
         thread_scope.displayhook("Use Print() to ensure printing to stream.")
         # print() always outputs to the stdout of the interpreter.
-
 
     def write(self, data):
         # Write data to the stream.
@@ -90,16 +98,19 @@ class InteractiveSocket(code.InteractiveConsole):
         # The default repl quits on control+d, control+d causes the line that
         # has been typed so far to be sent by netcat. That means that pressing
         # control+D without anything having been typed in results in a ''
-        # to be read into raw_value (even though it's not a line, not sure why)
-        # but when '' is read we know control+d has been sent, we raise
+        # to be read into raw_value.
+        # But when '' is read we know control+d has been sent, we raise
         # EOFError to gracefully close the connection.
         if (len(raw_value) == 0):
-            raise EOFError("Empty line, disconnect requested with ^D.")
+            raise EOFError("Empty line, disconnect requested with control-D.")
 
         return r
 
-# The entry point for connections.
+
 class RequestPythonREPL(ss.StreamRequestHandler):
+    """
+        THis is the entry point for connections from the socketserver.
+    """
     def handle(self):
         # Actually handle the request from socketserver, every connection is
         # handled in a different thread.
@@ -123,7 +134,7 @@ class RequestPythonREPL(ss.StreamRequestHandler):
 
         # Set up the environment for the repl, this makes halt() and Print()
         # available.
-        repl_scope=dict(globals(), **locals())
+        repl_scope = dict(globals(), **locals())
 
         # Create the console object and pass the stream's rfile and wfile.
         self.console = InteractiveSocket(self.rfile, self.wfile,
@@ -139,9 +150,10 @@ class RequestPythonREPL(ss.StreamRequestHandler):
             Print("SystemExit reached, closing the connection.")
             self.finish()
 
-# TCPServer with new thread for each connection:
+
 class ThreadedTCPServer(ss.ThreadingMixIn, ss.TCPServer):
-    # https://stackoverflow.com/a/18858817, ensure socket is directly available.
+    # from https://stackoverflow.com/a/18858817
+    # Ensures that the socket is available for rebind immediately.
     def server_bind(self):
         self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.socket.bind(self.server_address)
@@ -166,3 +178,4 @@ if __name__ == "__main__":
     server.server_close()
     server.shutdown()
     server_thread.join()
+    # This does not always correctly release the socket, hence SO_REUSEADDR.

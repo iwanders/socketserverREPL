@@ -8,6 +8,10 @@ import base64
 import hashlib
 import os
 
+# Ensure we have raw input if running in python3
+if sys.version_info.major == 3:
+    raw_input = input
+
 
 class socketREPL(object):
     def __init__(self, ip, port, echo=True):
@@ -30,17 +34,21 @@ class socketREPL(object):
                 d = self.sock.recv(1)
 
                 if (len(d) == 0):
-                    return b
+                    # no more data to be read, socket closed?
+                    return b.decode('ascii')
 
                 if d and print_function:
+                    # call the print function if it is set for local echo.
                     print_function(d)
 
                 b += d
 
                 if (b.endswith(b">>> ")):
+                    # We've detected a prompt, return
                     return b.decode('ascii')
 
                 if (b.endswith(b"... ")):
+                    # We've detected a prompt, return
                     return b.decode('ascii')
 
         except KeyboardInterrupt:
@@ -248,10 +256,10 @@ def run_repl(args):
 
     def read_split():
         z = c.read()
-        if z and (len(z) >= 4):
+        if (z.endswith(">>> ") or z.endswith("... ")):
             return z[:-4], z[-4:]
         else:
-            return b"", b""
+            return z, ""
 
     interrupt_counter = 0
     repling = True
@@ -287,26 +295,23 @@ def run_repl(args):
         except KeyboardInterrupt as e:
             # increase consecutive control+C counter.
             interrupt_counter += 1
+            sys.stdout.write("\n")
             if (interrupt_counter > 1):
                 sys.stdout.write("Local KeyboardInterrupt,"
-                                 " closing connection.")
+                                 " closing connection.\n")
                 break
-            print(e)
-
     c.close()
-    # ensure we are on a new line after this.
-    sys.stdout.write("\n")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('-d', '--dest', default=None,
                         help="Hostname or ip of target running REPL. Defaults"
-                        " to 127.0.0.1, will use environment REPL_HOST if"
-                        " set.")
+                        " to 127.0.0.1, will use environment value of "
+                        "REPL_HOST if set.")
     parser.add_argument('-p', '--port', default=None, type=int,
                         help="Port of target turnning REPL. Defaults"
-                        " to 1337, will use environment REPL_PORT if"
+                        " to 1337, will use environment value of REPL_PORT if"
                         " set.")
     subparsers = parser.add_subparsers(dest="command")
 
