@@ -25,7 +25,6 @@
 import argparse
 import sys
 import socket
-import time
 import base64
 import hashlib
 import os
@@ -45,7 +44,7 @@ class socketREPL(object):
         self.sock.sendall(z.encode('utf-8') + b"\n")
 
         if (self.echo):
-            sys.stdout.write("\033[1m" + z + "\033[0m" + "\n")
+            sys.stdout.write("\033[1m%s\033[0m\n" % z)
 
     def read(self, print_function=None):
         try:
@@ -65,11 +64,11 @@ class socketREPL(object):
 
                 b += d
 
-                if (b.endswith(b">>> ")):
+                if b.endswith(b">>> "):
                     # We've detected a prompt, return
                     return b.decode('utf-8')
 
-                if (b.endswith(b"... ")):
+                if b.endswith(b"... "):
                     # We've detected a prompt, return
                     return b.decode('utf-8')
 
@@ -89,11 +88,11 @@ def run_eval(args):
     statement = args.statement.replace("\\n", "\n")
 
     c = socketREPL(args.dest, args.port)
-    c.read(print_function=lambda x: sys.stdout.write(x))
+    c.read(print_function=sys.stdout.write)
 
     for line in statement.split("\n"):
         c.write(line)
-        c.read(print_function=lambda x: sys.stdout.write(x))
+        c.read(print_function=sys.stdout.write)
 
     c.close()
 
@@ -105,9 +104,9 @@ def run_exec(args):
     p += 'execfile(exec_name);'
 
     # check if we are verbose.
-    if (args.verbose):
+    if args.verbose:
         echo_flag = True
-        print_function = lambda x: sys.stdout.write(x)
+        print_function = sys.stdout.write
     else:
         echo_flag = False
         print_function = lambda x: None
@@ -165,19 +164,18 @@ def run_upload(args):
     # Read the prompt after.
     c.read(print_function=print_function)
 
-    if (args.check):
+    if args.check:
         # Calculate the hash of the file at the remote end.
         p = b"import hashlib;"
-        p += "x = hashlib.md5(); x.update(fdata);print(x.hexdigest());"
+        p += "print(hashlib.md5(fdata).hexdigest())"
         c.write(p)
         hash = c.read(print_function=print_function).split("\n")[0]
 
         # Calcualte the hash of the file as we have sent it.
-        x = hashlib.md5()
-        x.update(data)
+        x = hashlib.md5(data)
 
         # Compare them.
-        if (hash == x.hexdigest()):
+        if hash == x.hexdigest():
             sys.stdout.write("md5 {} of received data"
                              " matches source data.\n".format(hash))
         else:
@@ -196,9 +194,9 @@ def run_download(args):
     p += "print(fdata);"  # drop the data!
 
     # check if we are verbose.
-    if (args.verbose):
+    if args.verbose:
         echo_flag = True
-        print_function = lambda x: sys.stdout.write(x)
+        print_function = sys.stdout.write
     else:
         echo_flag = False
         print_function = lambda x: None
@@ -219,14 +217,14 @@ def run_download(args):
     if (args.check):
         # calculate the md5 of the sent data
         p = b"import hashlib;"
-        p += "x = hashlib.md5(); x.update(data);print(x.hexdigest());"
+        p += "print(hashlib.md5(data).hexdigest())"
         c.write(p)
         hash = c.read(print_function=print_function).split("\n")[0]
 
         # calculate local md5 of the received data
-        x = hashlib.md5()
-        x.update(data)
-        if (hash == x.hexdigest()):
+        x = hashlib.md5(data)
+
+        if hash == x.hexdigest():
             sys.stdout.write("md5 {} of received data"
                              " matches source data.\n".format(hash))
         else:
@@ -237,10 +235,10 @@ def run_download(args):
 
     # ensure destination folder exists, if no destination use basename to local
     # folder.
-    if (args.destination):
+    if args.destination:
         destination = args.destination
         dest_dir = os.path.dirname(destination)
-        if (dest_dir) and (not os.path.isdir(dest_dir)):
+        if dest_dir and not os.path.isdir(dest_dir):
             os.makedirs(dest_dir)
     else:
         destination = os.path.basename(args.source)
@@ -283,7 +281,7 @@ def run_repl(args):
         try:  # outer loop for keyboard interrupt (control+C)
             try:  # try raw_input to catch control+D
                 line = raw_input(prompt)
-            except EOFError as e:
+            except EOFError:
                 # got control+D, close everything gracefully.
                 repling = False
                 line = "exit()"  # interpret as if exit() was typed.
@@ -297,7 +295,7 @@ def run_repl(args):
             # read any output, and the prompt.
             output, prompt = read_split()
 
-        except KeyboardInterrupt as e:
+        except KeyboardInterrupt:
             # increase consecutive control+C counter.
             interrupt_counter += 1
             sys.stdout.write("\n")
