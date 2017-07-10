@@ -42,7 +42,7 @@ class socketREPL(object):
         self.echo = echo
 
     def write(self, z):
-        self.sock.sendall(z.encode('ascii') + b"\n")
+        self.sock.sendall(z.encode('utf-8') + b"\n")
 
         if (self.echo):
             sys.stdout.write("\033[1m" + z + "\033[0m" + "\n")
@@ -57,21 +57,21 @@ class socketREPL(object):
 
                 if (len(d) == 0):
                     # no more data to be read, socket closed?
-                    return b.decode('ascii')
+                    return b.decode('utf-8')
 
                 if d and print_function:
                     # call the print function if it is set for local echo.
-                    print_function(d.decode('ascii'))
+                    print_function(d.decode('utf-8'))
 
                 b += d
 
                 if (b.endswith(b">>> ")):
                     # We've detected a prompt, return
-                    return b.decode('ascii')
+                    return b.decode('utf-8')
 
                 if (b.endswith(b"... ")):
                     # We've detected a prompt, return
-                    return b.decode('ascii')
+                    return b.decode('utf-8')
 
         except KeyboardInterrupt:
             pass
