@@ -169,18 +169,18 @@ def run_upload(args):
         p = b"import hashlib;"
         p += "print(hashlib.md5(fdata).hexdigest())"
         c.write(p)
-        hash = c.read(print_function=print_function).split("\n")[0]
+        h = c.read(print_function=print_function).split("\n")[0]
 
         # Calcualte the hash of the file as we have sent it.
         x = hashlib.md5(data)
 
         # Compare them.
-        if hash == x.hexdigest():
+        if h == x.hexdigest():
             sys.stdout.write("md5 {} of received data"
-                             " matches source data.\n".format(hash))
+                             " matches source data.\n".format(h))
         else:
             sys.stderr.write("md5 {} of received data"
-                             " does not match source data.\n".format(hash))
+                             " does not match source data.\n".format(h))
 
     c.close()
 
@@ -219,17 +219,17 @@ def run_download(args):
         p = b"import hashlib;"
         p += "print(hashlib.md5(data).hexdigest())"
         c.write(p)
-        hash = c.read(print_function=print_function).split("\n")[0]
+        h = c.read(print_function=print_function).split("\n")[0]
 
         # calculate local md5 of the received data
         x = hashlib.md5(data)
 
-        if hash == x.hexdigest():
+        if h == x.hexdigest():
             sys.stdout.write("md5 {} of received data"
-                             " matches source data.\n".format(hash))
+                             " matches source data.\n".format(h))
         else:
             sys.stderr.write("md5 {} of received data"
-                             " does not match source data.\n".format(hash))
+                             " does not match source data.\n".format(h))
 
     c.close()
 
