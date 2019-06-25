@@ -307,7 +307,8 @@ def run_repl(args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(description="A helper script to interact"
+                                     " with a Python REPL exposed over tcp")
     parser.add_argument('-d', '--dest', default=None,
                         help="Hostname or ip of target running REPL. Defaults"
                         " to 127.0.0.1, will use environment value of "
