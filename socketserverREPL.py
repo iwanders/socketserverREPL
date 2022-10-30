@@ -29,12 +29,11 @@ import time
 import socket
 import argparse
 import os
+import platform
 
-# load following in python2 and python3 compatible way.
-if sys.version_info.major == 2:
-    import SocketServer as ss
-else:
-    import socketserver as ss
+
+import socketserver as ss
+
 
 # Create a function that is available from the shell to gracefully exit server
 # after disconnect.
@@ -180,8 +179,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Expose a Python REPL loop"
                                      " over a tcp socket.")
     parser.add_argument('-i', '--hostname', default=None,
-                        help="Ip to bind to defaults to 127.0.0.1, will use "
-                             "environment value of REPL_HOST if set.")
+                        help="Ip to bind to defaults to platform.node().lower() + '.local'.")
     parser.add_argument('-p', '--port', default=None, type=int,
                         help="Port to bind to. Defaults"
                         " to 1337, will use environment value of REPL_PORT if"
@@ -189,6 +187,8 @@ if __name__ == "__main__":
     parser.add_argument('-k', '--kill-active', default=False,
                         action="store_true", help="Kill active connections on"
                         " interrupt signal.")
+    parser.add_argument('-n', "--no-excepthook" , default=True,
+                        action="store_false", help="Wipe excepthook to default.")
 
     args = parser.parse_args()
 
@@ -196,7 +196,7 @@ if __name__ == "__main__":
         args.hostname = os.environ["REPL_HOST"]
 
     if args.hostname is None:  # still None, go for fallback.
-        args.hostname = "127.0.0.1"
+        args.hostname = "0.0.0.0"
 
     if "REPL_PORT" in os.environ and args.port is None:
         args.port = int(os.environ["REPL_PORT"])
@@ -204,6 +204,8 @@ if __name__ == "__main__":
     if (args.port is None):  # Still None, go for fallback.
         args.port = 1337
 
+    if args.no_excepthook:
+        sys.excepthook = sys.__excepthook__
 
     # Create the server object and a thread to serve.
     server = ThreadedTCPServer((args.hostname, args.port), RequestPythonREPL)

@@ -139,7 +139,7 @@ def run_upload(args):
     else:
         destination = args.source
 
-    p += 'f = open("{}", "w");'.format(destination)
+    p += 'f = open("{}", "wb");'.format(destination)
     p += 'fdata = base64.b64decode("{}");'.format(datab64)
     p += 'f.write(fdata);'
     p += ' f.close();'
@@ -188,7 +188,7 @@ def run_upload(args):
 def run_download(args):
     # Payload to read data and print the base64 string.
     p = 'import base64;'
-    p += 'f = open("{}", "r");'.format(args.source)
+    p += 'f = open("{}", "rb");'.format(args.source)
     p += 'data = f.read(); fdata = base64.b64encode(data);'
     p += ' f.close();'
     p += "print(fdata);"  # drop the data!
@@ -209,7 +209,7 @@ def run_download(args):
     # drop the payload
     c.write(p)
     # Read the base64 string and split the prompt from it.
-    blob = c.read(print_function=print_function).split("\n")[0]
+    blob = c.read(print_function=print_function).split("\n")[0][2:-1]
 
     # decode the data
     data = base64.b64decode(blob)

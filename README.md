@@ -4,7 +4,7 @@ does so in a manner that allows multiple connections at the same time, each
 connection runs in a separate thread and has its own scope. It is a pure Python
 implementation relying on the [code][module_code] and
 [socketserver][module_socketserver] modules.
-Tested on Python 2.7 and Python 3.4.
+Tested on Pythonista 3, running Python 3.4.
 
 ## What is the use case?
 I created this to facilitate development for [Pythonista][pythonista], a Python
