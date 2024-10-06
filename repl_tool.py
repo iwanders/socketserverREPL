@@ -219,7 +219,7 @@ def run_download(args):
 
     if (args.check):
         # calculate the md5 of the sent data
-        p = b"import hashlib;"
+        p = "import hashlib;"
         p += "print(hashlib.md5(data).hexdigest())"
         c.write(p)
         h = c.read(print_function=print_function).split("\n")[0]
@@ -247,7 +247,7 @@ def run_download(args):
         destination = os.path.basename(args.source)
 
     # Finally, write the data to the destination file.
-    with open(destination, "w") as f:
+    with open(destination, "wb") as f:
         f.write(data)
 
 
