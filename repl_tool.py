@@ -125,7 +125,8 @@ def run_upload(args):
         data = f.read()
 
     # Yay, data acquired, encode it such that it contains no quotes etc.
-    datab64 = base64.b64encode(data)
+    bytes_data = data.encode("utf-8") if isinstance(data, str) else data
+    datab64 = base64.b64encode(bytes_data)
 
     # craft the payload
     p = 'import base64;'
@@ -140,9 +141,9 @@ def run_upload(args):
         destination = args.source
 
     p += 'f = open("{}", "wb");'.format(destination)
-    p += 'fdata = base64.b64decode("{}");'.format(datab64)
+    p += 'fdata = base64.b64decode("{}");'.format(datab64.decode("utf-8"))
     p += 'f.write(fdata);'
-    p += ' f.close();'
+    p += 'f.close();'
 
     # check if we are verbose.
     if (args.verbose):
@@ -166,14 +167,16 @@ def run_upload(args):
 
     if args.check:
         # Calculate the hash of the file at the remote end.
-        p = b"import hashlib;"
+        p = "import hashlib;"
         p += "print(hashlib.md5(fdata).hexdigest())"
         c.write(p)
         h = c.read(print_function=print_function).split("\n")[0]
+        # print(h)
 
         # Calcualte the hash of the file as we have sent it.
-        x = hashlib.md5(data)
-
+        x = hashlib.md5(bytes_data)
+        # print(repr(x), type(x), x.hexdigest(), x)
+        # print(repr(h), type(h))
         # Compare them.
         if h == x.hexdigest():
             sys.stdout.write("md5 {} of received data"
